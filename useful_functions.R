@@ -42,3 +42,9 @@ tidy_ECDCdata <- function(dataframe){
   return(df) #return output
   
 } #end function
+
+Manage_ECDCdata <- function(dataframe) {
+  df <- dataframe %>%
+    mutate(CFR = (totaldeaths/totalcases)* 100, 
+           GF = totalcases / lag(totalcases, default = first(totalcases)))
+}
