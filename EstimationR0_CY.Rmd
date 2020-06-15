@@ -1,0 +1,732 @@
+---
+title: "Estimating R0 in Cyprus"
+author: "Solon Ioannou"
+date: "4/18/2020"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    collapsed: true
+    smooth_scroll: false
+    toc_depth: 3
+    number_sections: true
+bibliography: covid19bib.bib
+---
+<style>
+body {
+text-align: justify}
+</style>
+
+```{r setup, include = FALSE }
+knitr::opts_chunk$set(echo = FALSE,  fig.align="center", cache = FALSE)
+packages <- c("earlyR", "R0", "tidyverse", "incidence", "gridExtra", "broom", "knitr", "grid", "citr", "kableExtra", "cowplot", "rmarkdown")
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+invisible(lapply(packages, library, character.only = TRUE))
+library(earlyR)
+library(R0)
+library(tidyverse)
+library(incidence)
+library(gridExtra)
+library(broom)
+library(knitr)
+library(grid)
+library(citr)
+library(kableExtra)
+library(cowplot)
+source('Fetch_CYdata_api.R')
+source('useful_functions.R')
+```
+
+```{r, include = FALSE}
+#Importing data
+str(dfcy)
+#Managing data
+df <- tidy_CYdata(dfcy)
+df <- Manage_CYdata(df)
+str(df)
+max(df$Date)
+```
+
+# Introduction
+
+This report presents estimates for the basic reproductive number (R0) for Cyprus. Estimates are based on the available data on the current Sars-Cov-2 epidemic on confirmed cases in Cyprus. Due to the variability of the methods for the estimation of R0, the report develops and executes the estimations from various available open source imlpementation packages. A distinction is made between two phases of the epidemic, the growth phase, where the epidemic curve is exponentially increasing, and the decay phase, where the epidemic deteriorates. The report is structured as follows.
+
+The Methods section describes the data source and the methods used. Firstly, the report uses the Wallinga and Lipsitch method [@Wallinga2007] to provide an estimate for the R0 for both the growth phase and the decay phase. The authors emphasizes on the Wallinga and Lipsitch method for the decay phase of the epidemic as the appropriateness of the other methods for this phase of the epidemic is not clear. A comparison is followed between all methods for the growth phase of the epidemic, using both point and time varying estimates, and similar methods among various packages. The Results section provides a description and a summary of the estimations.   
+
+# Methods
+
+## Data source
+
+Data was retrieved from the open data portal of the gorvernment of Cyprus (<http://www.data.gov.cy>). The data is renewed daily after the official announcement of the daily results of potential patients screenings of the epidemiological team of the Cypriot Ministry of Health. The latest published results are used for this report. 
+
+## Statistical Analysis
+
+To evaluate the transmisibility of the virus, we used several methods available in the R statistical software. 
+
+### Generation Time and Serial Interval
+
+Most methods require the description of the generation time (GT) to provide an estimate for the R0. Generation time is defined as the differnce of the time between the moment of an infection of an individual and the moment the infected individual infects others. However, GT is rarely known during actual epidemic onsets as it is hard to be measured. Instead, the serial interval (SI) is used, as it is easier to be observed.
+
+Serial interval is defined as the mean duration between time of symptom onset of a secondary infectee and the time of symptom onset of its primary infector. The SI is best described through evidence based synthesis from cluster analysis of confirmed cases with epidemiological links evaluated through prospective contact tracing. 
+
+In absence of official reports for the SI in Cyprus, this report uses published results on the SI from other sources. Namely, a report from Li and colleagues reports an SI of mean 7.5 and standard deviation of 3.4 in Wuhan for the first 425 cases (estimated time before January 1st until January 22nd) [-@Li2020]. Another report from the early outbreak in Hong Kong, reports that the mean SI is 4.4 days (95%CI: 2.9−6.7)  and s.d at 3 days (95%CI: 1.8−5.8) by using information on 21 transmission chains [@Zhao2020]. The distribution of SI is in accordance with two other studies [@You2020; @Nishiura2020]. This report provides results over two SIs with $\mu = {7.5, 4.4}$ and $\sigma^2 = {3.5, 3}$.
+
+### Estimation of R0
+
+There are several available methods for estimation of R0. Reproduction numbers may be estimated at different times during an epidemic. Estimating the “initial” reproduction number, i.e. at the beginning of an outbreak, and for estimating the “time-dependent” reproduction number at any time during an outbreak. We estmate R0 for the early phase of the outbreak in Cyprus, defined as the growth phase which uses the information from the first day of reporting a confirmed case until the day of the highest reporting incidence. We also estimate R0 for the later stage of the outbreak, defined as the decay phase, using data after the maximum date of incidence to date. We also estimate the time dependent R0 as it forms with each day of reporting incidence. 
+
+Specifically, we use the exponential growth rate estimation (EG) as described by Wallinga & Lipsitch [-@Wallinga2007]. The EG rate during the early phase of an outbreak can be linked to the initial reproduction ratio. The R0 number is computed as $$R0 = 1/M(-r)$$ where M is the moment generating function of the SI distribution. It is suggested to use the deviance of the R-squared statistic to guide the choice of the period to be used. 
+
+Maximum-Likelihood estimation is also implemented for the estimation of R0 as proposed by White & Pagano [-@ForsbergWhite2008]. The method uses the assumption that the number of secondary cases caused by an index case is Poisson distributed with expected value R. The likelihood must be calculated over an exponential period. 
+
+The sequential bayesian method (SB) described by Bettencourt and Ribeiro allows a sequential estimation of R0 [-@Bettencourt2008]. Using a bayesian framework, it starts with a non-informative prior on the distribution of R0. The prior distribution is updated as incidence is oberved, ie the prior distribution for R used on each day is the posterior distribution of the previous day. At each time the mode of the distribution is computed along with the highest probability density interval. The method requires that the epidemic is in a period of exponential growth. 
+
+Finaly, the time dependent method (TD) described by Wallinga and Teunis, computes R0 by averaging over all transmission networks compatible with observations [-@Wallinga2004]. 
+
+Estimation of R0 was implemented using a range of sources. The series of packages from the RECON consortium was fully employed (packages 'Incidence', 'EarlyR', along with their dependencies) as well as a unified framework to implement several generic methods for the basic reproduction number through package 'R0'. Finally package EpiEstim allowed for simulation of various distributions of the SI, including a parametric and non-parametric distributions. 
+
+# Results
+
+## Inspecting Incidence - The epidemic Curve in Cyprus
+
+The first reported confirmed case in Cyprus was `r print(as.Date(df$Date[[1]], format= "%d/%m/%y"), quote = FALSE )`, where `r print(df$newcase[1])` were reported. Until the last official reports the total number of confirmed cases is `r sum(df$newcases)`. The Cypriot epidemic curve is displayed on Figure 1.
+
+```{r, include=FALSE}
+#creating incidence objects
+#Extracting incidence
+local_case_dates <- df %>%
+    select(Date, newcases) %>%
+    uncount(newcases) %>%
+    pull(Date) 
+
+local_cases <- local_case_dates %>%
+                  incidence(.)
+
+local_cases_with_dates <- df %>%
+      select(Date, newcases) 
+
+peaky_blinder <- find_peak(local_cases)
+
+
+#defining the index of the highest date
+match(max(df$newcases), df$newcases)
+max_inc <- match(max(df$newcases), df$newcases)
+max_inc_date <- df$Date[max_inc]
+
+#plot(as.incidence(local_cases$counts, dates = local_cases$dates))
+
+inc_plot <- ggplot(df, aes(x = Date, y = newcases)) + geom_bar(stat = "identity", fill = "skyblue3") + theme_bw() + labs(y = "Daily Incidence", x = "Dates") + labs(title = "The epidemic curve") + scale_x_date(date_labels = "%d/%m", date_breaks = "1 week")
+inc_plot + scale_x_date(date_labels = "%d/%m", date_breaks = "1 week")
+
+inc_plot2 <- inc_plot + geom_smooth() + labs(title = "The epidemic curve with a LOESS function")
+
+#grid.arrange(inc_plot, inc_plot2, ncol =2 )
+```
+
+**Figure 1**
+
+```{r, echo=FALSE}
+inc_plot
+```
+
+## Estimation of R0 using the growth (exponential) rate
+
+Next, we fit a log linear model to the epidemic curve. For sufficiently modelling the epidemic curve, both the growth and decay phases need to be modelled. We identify the date with the highest incidence which is `r max_inc_date`. The growth phase is considered every day from the first reported confirmed case until the day with the highest incidence and the decay phase, all days tha follow until the last reported incidence (`r max(df$Date)`). 
+
+```{r, include=FALSE}
+inc_fit <- incidence::fit(local_cases, split = peaky_blinder)
+plot(local_cases, border = "white")
+
+plot2 <- plot(local_cases, color = "skyblue3", alpha = 1, border = "white") %>% add_incidence_fit(inc_fit) + 
+    labs(title = "Observed and modelled incidence of COVID-19 cases", 
+        subtitle = "Cyprus, 2020")
+
+plot2 + theme_bw() 
+#growth rates
+get_info(inc_fit)
+ 
+
+get_info(inc_fit, "r")[1]
+
+# For the first half
+#Lower CI
+get_info(inc_fit, "r.conf")[1,1]
+#Upper CI
+get_info(inc_fit, "r.conf")[1,2]
+
+# For the second half
+#Lower CI
+get_info(inc_fit, "r.conf")[2,1]
+#Upper CI
+get_info(inc_fit, "r.conf")[2,2]
+
+#Doubling times
+get_info(inc_fit, "doubling")[1]
+get_info(inc_fit, "halving")
+```
+
+**Figure 2**
+
+```{r, echo = FALSE}
+plot2 + theme_bw() + theme(plot.title = element_text(hjust = 0.5),  plot.subtitle = element_text(hjust=0.5))
+```
+
+From the model, we can extract various parameters of interest: the growth rate prior to the peak was `r format(incidence::get_info(inc_fit, "r")[1],digits=2,nsmall=2)` (95% CI `r format(incidence::get_info(inc_fit, "r.conf")[1,1],digits=2,nsmall=2)` - `r format(incidence::get_info(inc_fit, "r.conf")[1,2],digits=2,nsmall=2)`), and the decay rate after the peak was `r format(incidence::get_info(inc_fit, "r")[2],digits=2,nsmall=2)` (95% CI `r format(incidence::get_info(inc_fit, "r.conf")[2,2],digits=3,nsmall=2)` - `r format(incidence::get_info(inc_fit, "r.conf")[2,1],digits=3,nsmall=2)`).
+
+```{r, include=FALSE}
+library(distcrete)
+library(epitrix)
+mu <- 7.5  # days
+sigma <- 3.4  # days
+param <- gamma_mucv2shapescale(mu, sigma/mu)
+
+w1 <- distcrete("gamma", interval = 1, shape = param$shape, scale = param$scale, 
+    w = 0)
+
+growth_R0 <- lm2R0_sample(inc_fit$before$model, w1)
+hist(growth_R0, col = "grey", border = "white", main = "Distribution of R0 before peak day")
+summary(growth_R0)
+
+str(growth_R0)
+
+growth_plot <- ggplot(mapping = aes(growth_R0)) + geom_histogram(fill = "skyblue4", col = "white") + theme_bw() + labs(title = "Distribution of R0 before peak day", x = "R0 distribution", y = "Frequency") + theme(plot.title = element_text(hjust = 0.5),  plot.subtitle = element_text(hjust=0.5))
+
+growth_plot
+
+growth_df <- tidy(summary(growth_R0))
+```
+
+```{r, include=FALSE}
+decay_R0 <- lm2R0_sample(inc_fit$after$model, w1)
+hist(decay_R0, col = "grey", border = "white", main = "Distribution of R0 after peak day")
+summary(decay_R0)
+
+decay_plot <- ggplot(mapping = aes(decay_R0)) + geom_histogram(fill = "skyblue4", col = "white") + theme_bw() + labs(title = "Distribution of R0 after peak day", x = "R0 distribution", y = "Frequency") + theme(plot.title = element_text(hjust = 0.5),  plot.subtitle = element_text(hjust=0.5))
+
+decay_plot
+
+decay_df <- tidy(summary(decay_R0))
+
+grid.arrange(growth_plot, decay_plot, ncol = 2)
+
+#Joining growth_df and decay_df
+overall_df <- growth_df %>% full_join(decay_df)
+
+row.names(overall_df) <- c("Growth Phase", "Decay Phase")
+#as.data.frame(overall_df)
+kable(as.data.frame(overall_df))
+```
+
+```{r, include=FALSE}
+#estimation using the Wallinga and Lipsitch method epitrix
+growth_R01 <- r2R0(inc_fit$before$info$r, w1)
+growth_R01_CI <- r2R0(inc_fit$before$info$r.conf, w1)
+
+decay_R01 <- r2R0(inc_fit$after$info$r, w1)
+decay_R01_CI <- r2R0(inc_fit$after$info$r.conf, w1)
+
+# Changing SI
+mu <- 4.4  # days
+sigma <- 3  # days
+param2 <- gamma_mucv2shapescale(mu, sigma/mu)
+
+w2 <- distcrete("gamma", interval = 1, shape = param2$shape, scale = param2$scale, 
+    w = 0)
+
+growth_R02 <- r2R0(inc_fit$before$info$r, w2)
+growth_R02_CI <- r2R0(inc_fit$before$info$r.conf, w2)
+decay_R02 <- r2R0(inc_fit$after$info$r, w2)
+decay_R02_CI <- r2R0(inc_fit$after$info$r.conf, w2)
+
+
+reswl <- data.frame(meanSIandSD = c("7.5, 3.4", "4.4, 4"), 
+           R0_growth = c(growth_R01, growth_R02),
+           R0_growth_CI_low = c(growth_R01_CI[1], growth_R02_CI[1]),
+           R0_growth_CI_high = c(growth_R01_CI[2], growth_R02_CI[2]),
+           R0_decay = c(decay_R01, decay_R02),
+           R0_decay_CI_low = c(decay_R01_CI[1], decay_R02_CI[1]),
+           R0_decay_CI_high = c(decay_R01_CI[2], decay_R02_CI[2])
+           )
+
+reswl <- data.frame(mean = c(rep(7.5, 2), rep(4.4, 2)), 
+                    SD = c(rep(3.4, 2), rep(4, 2)),
+                    Growth_Factor = c(rep(inc_fit$before$info$r, 2), rep(inc_fit$after$info$r, 2)),
+                    Growth_Factor_CI = c(inc_fit$before$info$r.conf, inc_fit$after$info$r.conf),
+           R0_growth = c(rep(growth_R01, 2), rep(growth_R02, 2)),
+           R0_growth_CI = c(growth_R01_CI[1,], growth_R02_CI[1,]),
+           R0_decay = c(rep(decay_R01, 2), rep(decay_R02, 2)),
+           R0_decay_CI = c(decay_R01_CI[1,], decay_R02_CI[1,])
+           )
+
+
+table1_output <- kable(reswl, align = "c", digits = 2, escape = F ,    
+      col.names = c("$\\mu_{SI}$",
+                    "$\\sigma^2_{SI}$",
+                    "GF", 
+                    "GF$CI_{95\\%}$",
+                    "R0", 
+                    "R0$CI_{95\\%}$",
+                    "R0",
+                    "R0$CI_{95\\%}$"), caption = "**Table 1: Estimation of R0 by the growth rate**") 
+
+table1_output <- table1_output %>%   kable_styling(bootstrap_options = "striped", full_width = F) %>%
+  collapse_rows(valign = "middle") %>%
+  add_header_above(c('Serial\nInterval' = 2, "Exponential\nrate" = 2, "Growth\nPhase" = 2, "Decay\nPhase" = 2)) 
+
+```
+
+`r table1_output`
+
+These growth and decay rates are equivalent to a doubling time of `r format(incidence::get_info(inc_fit, "doubling")[1],digits=1,nsmall=1)` days (95% CI `r format(incidence::get_info(inc_fit, "doubling.conf")[1],digits=1,nsmall=1)` - `r format(incidence::get_info(inc_fit, "doubling.conf")[2],digits=1,nsmall=1)` days), and a halving time of `r format(incidence::get_info(inc_fit, "halving")[1],digits=1,nsmall=1)` days (95% CI `r format(incidence::get_info(inc_fit, "halving.conf")[1],digits=1,nsmall=1)` - `r format(incidence::get_info(inc_fit, "halving.conf")[2],digits=1,nsmall=1)` days). 
+
+Table 1 presents the estimates of R0 for both the growth phase and decay phases along with the confidence intervals, for each growth(decay) rate.
+
+```{r}
+#**Figure 3**
+#`r grid.arrange(growth_plot, decay_plot, ncol = 2)`
+```
+
+## Estimating R0 on the early (growth) phase of the epidemic
+
+The early R package provides a function for the maximum likelihood estimation of the R0 on the exponential part of the epidemic curve. We provide two such analyses, estimating the R0 over two SI distributions with mean 7.5 and s.d 3.4 (1) and mean 4.4 and s.d 3. 
+
+```{r, include=FALSE}
+#using the earlyR package
+# recreate the incidence object using data only up to the peak  
+local_growth_phase_case_dates <- df %>%
+      filter(Date <= peaky_blinder) %>%
+      select(Date, newcases) %>%
+      uncount(newcases) %>%
+      pull(Date)
+    
+local_growth_phase_cases <- local_growth_phase_case_dates %>%
+      incidence(., last_date=peaky_blinder)
+
+#Defining serial interval
+si.mean = 7.5
+si.sd = 3.4
+
+res1 <- get_R(local_growth_phase_cases, si_mean = si.mean, si_sd = si.sd)
+res1
+
+plotR01 <- plot(res1, main = "SI mean = 7.5, s.d = 3.4")
+
+plotR01_L <- plot(res1, "lambdas")
+
+res1_ci_low <- res1$R_grid[min(which(cumsum(res1$R_like / sum(res1$R_like)) - 0.025 >=0))]
+res1_ci_high <- res1$R_grid[min(which(cumsum(res1$R_like / sum(res1$R_like)) - 0.975 >=0))]
+
+```
+
+```{r, include=FALSE}
+#Defining serial interval
+si.mean = 4.4
+si.sd = 3
+
+res2 <- get_R(local_growth_phase_cases, si_mean = si.mean, si_sd = si.sd)
+res2
+
+res2_ci_low <- res2$R_grid[min(which(cumsum(res2$R_like / sum(res2$R_like)) - 0.025 >=0))]
+res2_ci_high <- res2$R_grid[min(which(cumsum(res2$R_like / sum(res2$R_like)) - 0.975 >=0))]
+
+plotR02 <- plot(res2, main = "SI mean = 4, s.d = 3")
+
+#grid.arrange(plotR01, plotR02, ncol = 2, left =  right = "SI mean = 4, s.d = 3" )
+plotR02_L <- plot(res2, "lambdas")
+```
+
+```{r, include=FALSE, fig.width=8, fig.height=8}
+par(mfrow = c(2, 2), oma = c(0, 0, 2, 0))
+plot(res1, main = "SI mean = 7.5, s.d = 3.4")
+plot(res1, "lambdas")
+plot(res2, main = "SI mean = 4.4, s.d = 3")
+plot(res2, "lambdas")
+mtext("ML estimation for R0 over two SI distributions", outer = TRUE, cex = 1.5)
+```
+
+```{r, include=FALSE}
+### Sampling R0 
+R_val_1 <- sample_R(res1, 1000)
+summary(R_val_1)
+quantile(R_val_1)
+quantile(R_val_1, c(0.025, 0.975))
+
+R_val_2 <- sample_R(res2, 1000)
+summary(R_val_2)
+quantile(R_val_2)
+quantile(R_val_2, c(0.025, 0.975))
+```
+
+
+```{r, include=FALSE}
+par(mfrow = c(1, 2), oma = c(0, 0, 2, 0))
+hist(R_val_1, border = "grey", col = "navy",
+     xlab = "Values of R",
+     main = "SI mean 7.5, 3.4")
+hist(R_val_2, border = "grey", col = "navy",
+     xlab = "Values of R",
+     main = "SI mean 4.4, sd 3")
+mtext("Sample of likely R0 over two SI", outer = TRUE, cex = 1.5)
+```
+
+```{r, include=FALSE}
+si <- res1$si
+si
+str(res1$si)
+```
+
+```{r, include=FALSE}
+#using the R0 package
+#creating generation time with mean 4 and sd 4 time unnits
+GT.covid <- generation.time("gamma", c(7.5, 3.4))
+#visualising the generation time
+plot(GT.covid)
+
+```
+
+```{r include=FALSE}
+res3 <- estimate.R(epid = local_growth_phase_case_dates, GT = GT.covid, begin = 1, end = 24, methods = c("EG","ML","SB","TD"))
+
+res3$estimates$EG
+res3_df <- data.frame(
+  Method = c("EG", "ML~1~", "SB", "ML~2~"),
+  R0 =  c(res3$estimates$EG$R, res3$estimates$ML$R, res3$estimates$SB$R[2], res1$R_ml), 
+  R_CI_min = c(res3$estimates$EG$conf.int[1], res3$estimates$ML$conf.int[1], res3$estimates$SB$conf.int[[1]][[2]], res1_ci_low), 
+  R_CI_max = c(res3$estimates$EG$conf.int[2], res3$estimates$ML$conf.int[2], res3$estimates$SB$conf.int[[2]][[2]], res1_ci_high)
+)
+
+res3_df_1 <- tableGrob(res3_df)
+
+
+gg1 <- ggplot(res3_df, aes(x = Method, y = R0)) + geom_point() +geom_errorbar(aes(ymin = R_CI_min, ymax = R_CI_max),   width=.2) + theme_bw() + labs(title = "A) Growth phase") + theme(plot.title = element_text(hjust = 0.5),  plot.subtitle = element_text(hjust=0.5))
+
+```
+
+```{r, include=FALSE}
+#using the R0 package
+#creating generation time with mean 4 and sd 4 time unnits
+GT.covid_2 <- generation.time("gamma", c(4.4, 3))
+#visualising the generation time
+plot(GT.covid_2)
+
+```
+
+```{r include=FALSE}
+res3_1 <- estimate.R(epid = local_growth_phase_case_dates, GT = GT.covid_2, begin = 1, end = 24, methods = c("EG","ML","SB","TD"))
+
+res3_1$estimates$EG
+res3_1_df <- data.frame(
+  Method = c("EG", "ML~1~", "SB", "ML~2~"),
+  R0 =  c(res3_1$estimates$EG$R, res3_1$estimates$ML$R, res3_1$estimates$SB$R[2], res2$R_ml), 
+  R_CI_min = c(res3_1$estimates$EG$conf.int[1], res3_1$estimates$ML$conf.int[1], res3_1$estimates$SB$conf.int[[1]][[2]], res2_ci_low), 
+  R_CI_max = c(res3_1$estimates$EG$conf.int[2], res3_1$estimates$ML$conf.int[2], res3_1$estimates$SB$conf.int[[2]][[2]], res2_ci_high)
+)
+
+res3_1_df_1 <- tableGrob(res3_1_df)
+kable(res3_1_df)
+
+gg2 <- ggplot(res3_1_df, aes(x = Method, y = R0)) + geom_point() +geom_errorbar(aes(ymin = R_CI_min, ymax = R_CI_max),   width=.2) + theme_bw() + labs(title = "B) Decay phase") + theme(plot.title = element_text(hjust = 0.5),  plot.subtitle = element_text(hjust=0.5))
+
+res3df <- left_join(res3_df, res3_1_df, by = "Method")
+
+kableres <- kable(res3df, align = "c", digits = 2, escape = F ,    
+      col.names = c("Method",
+                    "R0",
+                    "R0$CI_{low}$", 
+                    "R0$CI_{high}$",
+                    "R0", 
+                    "R0$CI_{low}$",
+                    "R0$CI_{high}$"), caption = "**Table 2: Estimation of R0 over the growth phase**") %>%                     kable_styling(bootstrap_options = "striped", full_width = F) %>%
+  collapse_rows(valign = "middle") %>%
+  add_header_above(c("", "SI\n$\\mu = 7.5, \\sigma^2 = 3.4$" = 3, "SI\n$\\mu = 4.4, \\sigma^2 = 3$" = 3 )) 
+
+
+```
+
+`r kableres`
+
+As we can see in Table 2, there is a notable variability in the estimates of the methods. A notable difference, is the difference between ML~1~ and ML~2~ in the R0 estimation of 2.38 and 1.8, respectively. 
+
+*Note: Check if there is a correction on the Maximum Likelihood estimation applied in one of the two mehods*
+
+A this point, it is of interest two notice the force of infection as indicated in Figure 3 below. 
+
+**Figure 3**
+
+```{r, echo=FALSE}
+par(mfrow = c(1, 2), oma = c(0, 0, 2, 0))
+plot(res1, "lambdas")
+plot(res2, "lambdas")
+mtext("ML estimation for R0 over two SI distributions", outer = TRUE, cex = 1.5)
+```
+
+Another way of representing the differences of the R0 estimates is shown in Figure 5. 
+
+**Figure 4**
+
+```{r, echo = FALSE}
+grid.arrange(gg1, gg2, ncol = 1, top = textGrob("Estimation of R0 by all methods"))
+```
+
+```{r, include=FALSE}
+#Creating an object with the incidence up to 
+local_growth_phase_case_dates_4 <- df %>%
+      select(Date, newcases) %>%
+      pull(newcases) 
+
+local_growth_phase_cases_4 <- local_growth_phase_case_dates_4 %>%
+      incidence(., last_date=max(.))
+
+res4 <- estimate.R(epid = local_growth_phase_case_dates_4, GT = GT.covid, begin = 1, end = 24, methods = c("EG","ML","SB","TD"))
+
+attributes(res4)
+res4
+
+methods <- c("EG","ML","SB","TD")
+
+
+TDest <- est.R0.TD(epid = local_growth_phase_case_dates_4, GT = GT.covid, begin = 1, end = 24)
+plot(TDest)
+plotfit(TDest)
+str(TDest)
+
+#plotlist4 <- lapply(methods, function(x) plot(print(paste("res4$estimates$", x, sep = ""), quote = FALSE)))
+plot(res4$estimates$EG)
+plot(res4$estimates$ML)
+plot(res4$estimates$SB)
+plot(res4$estimates$TD)
+res4$estimates$SB$R[2]
+
+plotfit(res4$estimates$EG)
+plotfit(res4$estimates$ML)
+#plotfit(res4$estimates$SB)
+plotfit(res4$estimates$TD)
+
+```
+
+```{r, include = FALSE}
+par(mfrow =c(2, 2))
+plot(res4$estimates$EG)
+plot(res4$estimates$ML)
+plot(res4$estimates$SB)
+plot(res4$estimates$TD)
+
+res4$estimates$EG[[2]][[1]]
+res4$estimates$ML[1]
+
+
+#Extract results to a dataframe
+
+res_df <- data.frame(
+  Method = c("EG", "ML", "SB"),
+  R0 =  c(res4$estimates$EG$R, res4$estimates$ML$R, res4$estimates$SB$R[2]), 
+  R_CI_min = c(res4$estimates$EG$conf.int[1], res4$estimates$ML$conf.int[1], res4$estimates$SB$conf.int[[1]][[2]]), 
+  R_CI_max = c(res4$estimates$EG$conf.int[2], res4$estimates$ML$conf.int[2], res4$estimates$SB$conf.int[[2]][[2]])
+)
+
+res_df_1 <- tableGrob(res_df)
+
+
+gg1 <- ggplot(res_df, aes(x = Method, y = R0)) + geom_point() +geom_errorbar(aes(ymin = R_CI_min, ymax = R_CI_max),   width=.2) + theme_bw() + labs(title = "A) Growth phase") + theme(plot.title = element_text(hjust = 0.5),  plot.subtitle = element_text(hjust=0.5))
+
+plotfit(res4$estimates$EG)[[2]]
+plotfit(res4$estimates$ML)[[2]]
+#plotfit(res4$estimates$SB)[[2]]
+
+
+#ggplot(mapping = aes(res4$estimates$EG[[1]])) + geom_errorbar(aes(ymin = res4$estimates$EG[[2]][[1]], ymax = res4$estimates$EG[[2]][[2]])) + ggplot(mapping = aes(res4$estimates$ML[[1]])) + geom_errorbar(aes(ymin = res4$estimates$EG[[2]][[1]], ymax = res4$estimates$EG[[2]][[2]]))
+```
+
+```{r, include=FALSE}
+### Estimation of the R0 on the later phase
+#Estimating R0 for the rest of the period
+# recreate the incidence object using data only up to the peak  
+local_growth_phase_case_dates_rest <- df %>%
+      filter(Date > peaky_blinder) %>%
+      select(Date, newcases) %>%
+      uncount(newcases) %>%
+      pull(Date)
+    
+local_growth_phase_cases_rest <- local_growth_phase_case_dates_rest %>%
+      incidence(., last_date=max(.))
+
+#Defining serial interval
+si.mean = 4
+si.sd = 4
+
+res5 <- get_R(local_growth_phase_cases_rest, si_mean = si.mean, si_sd = si.sd)
+res5
+
+plot(res5)
+```
+
+```{r, include=FALSE}
+#Examining estimate.R objects
+str(res4)
+res4$GT
+print(res4$estimates$TD)
+TD.weekly <- smooth.Rt(res4$estimates$TD, 7)
+TD.weekly
+plot(TD.weekly)
+class(res4$estimates)
+res4$estimates$EG
+res4$estimates$ML
+res4$estimates$SB
+res4$estimates$TD
+
+res4$estimates[[1]]
+res4$estimates[[4]]
+```
+
+## Time varying estimations {.tabset .tabset-fade}
+
+```{r, include=FALSE}
+
+plot_Ri_1 <- function(resobj) {
+    p_SI_1 <- plot(resobj[["GT"]])  # plots the serial interval distribution
+    p_Ri_1 <- plot(resobj[["estimates"]][["TD"]])
+    p_SI <- as_grob(p_SI_1)
+    p_Ri <- as_grob(p_Ri_1)
+    grid.newpage()
+    return(gridExtra::grid.arrange(p_SI, p_Ri, ncol = 1))
+}
+
+plot(res3$estimates$TD)
+plot(res3[["estimates"]][["TD"]])
+plot(res3$GT)
+
+p_SI_1 <- plot(res3$GT)  # plots the serial interval distribution
+p_Ri_1 <- plot(res3[["estimates"]][["TD"]])
+    p_SI <- as_grob(p_SI_1, device = NULL)
+    p_Ri <- as_grob(p_Ri_1, device = NULL)
+    grid.newpage()
+gridExtra::grid.arrange(as_grob(p_SI_1), as_grob(p_Ri_1), ncol = 1)
+
+grid.newpage()
+grid.draw(as_grob(p_SI_1))
+plot_Ri_1(res3)
+```
+
+```{r, include=FALSE}
+par(mfrow = c(2, 1))
+plot(res4$GT)
+plot(res4$estimates$TD)
+```
+
+```{r, include=FALSE}
+library(EpiEstim)
+plot_Ri <- function(estimate_R_obj) {
+  #p_I <- plot(estimate_R_obj, "incid", add_imported_cases = TRUE)  # plots the incidence
+    p_SI <- plot(estimate_R_obj, "SI")  # plots the serial interval distribution
+    p_Ri <- plot(estimate_R_obj, "R")
+    return(gridExtra::grid.arrange(p_SI, p_Ri, ncol = 1))
+}
+
+parametric_si <- estimate_R(local_cases, 
+    method = "parametric_si", config = make_config(list(mean_si = 7.5, 
+        std_si = 3.4)))
+
+
+parametric_si_2 <- estimate_R(local_cases, 
+    method = "parametric_si", config = make_config(list(mean_si = 4.4, 
+        std_si = 3)))
+
+```
+
+```{r, include=FALSE}
+mean_si <- 7.5
+sd_si <- 3.4
+t.start <- seq(1, nrow(df)-6)
+t.end <- seq(7, nrow(df))
+W_T_param <- wallinga_teunis(local_cases, 
+                             method = "parametric_si", 
+                             config = list(t_start = t.start, t_end = t.end, 
+                                           mean_si = mean_si, 
+                                           std_si = sd_si, 
+                             n_sim = 100))
+```
+
+```{r include=FALSE}
+mean_si <- 4.4
+sd_si <- 3
+W_T_param <- wallinga_teunis(local_cases, 
+                             method = "parametric_si", 
+                             config = list(t_start = t.start, t_end = t.end, 
+                                           mean_si = mean_si, 
+                                           std_si = sd_si, 
+                             n_sim = 100))
+```
+
+```{r, include=FALSE}
+nonparametric_si <- estimate_R(local_cases, method = "uncertain_si", 
+    config = make_config(list(mean_si = 7.5, std_mean_si = 2, 
+        min_mean_si = 1, max_mean_si = 15, std_si = 3.4, std_std_si = 1, 
+        min_std_si = 0.5, max_std_si = 8, n1 = 1000, n2 = 1000)))
+
+```
+
+```{r, include=FALSE}
+mean_si <- 4.4
+sd_si <- 3
+discrete_si_distr <- discr_si(seq(0, 20), mean_si, sd_si)
+
+W_T <- wallinga_teunis(local_cases, 
+                       method = "non_parametric_si", 
+                       config = list(t_start = t.start, t_end = t.end,
+                 si_distr = discrete_si_distr,
+                 n_sim = 100))
+
+```
+
+### Figure 5A
+<h4>**Parametric SI ($\mu = 7.5, \sigma^2 = 3.4$)**</h4>
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+plot_Ri(parametric_si)
+```
+
+### Figure 5B
+<h4>**Parametric SI ($\mu = 4.4, \sigma^2 = 3$)**</h4>
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+plot_Ri(parametric_si_2)
+```
+
+### Figure 5C 
+<h4>**SI($\mu = 7.5, \sigma^2 = 3.4$) *(Wallinga and Teunis Method)* **<h4>
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+plot_Ri(W_T_param)
+```
+
+### Figure 5D 
+<h4>**SI($\mu = 4.4, \sigma^2 = 3$) *(Wallinga and Teunis Method)* **<h4>
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+plot_Ri(W_T_param)
+```
+
+### Figure 5E 
+<h4>**Uncertain SI distribution over a range o $\mu, \sigma^2$**<h4>
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+plot_Ri(nonparametric_si)
+```
+
+### Figure 5F
+<h4>**Uncertain SI distribution over a range o $\mu, \sigma^2$ *(Wallinga and Teunis Method)* **<h4> 
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+plot_Ri(W_T)
+```
+
+# Discussion
+
+When to start estimating the R0(beginning), at least after one mean serial interval, and when at least 12 cases have been observed since the beginning of the epidemic.
+
+Further work: 
+- simulate SI intervals
+- sensitivity analysis for SI. Sensitivity analysis on the SI distribution can reveal the range of uncertainty. 
+- It is not in the scope of this report, however, the global force of infection at the growth phase might give an indication of the SI, as well as, be used to measure the effectiveness of intervention measures implemented in Cyprus. 
+
+# Conclusion
+
+# References
+
