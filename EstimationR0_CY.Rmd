@@ -18,7 +18,11 @@ text-align: justify}
 </style>
 
 ```{r setup, include = FALSE }
+<<<<<<< HEAD
 knitr::opts_chunk$set(echo = FALSE,  fig.align="center")
+=======
+knitr::opts_chunk$set(echo = FALSE,  fig.align="center", cache = FALSE)
+>>>>>>> 9ca75faa7631f26bb25d2e21e10c6c80531502d0
 packages <- c("earlyR", "R0", "tidyverse", "incidence", "gridExtra", "broom", "knitr", "grid", "citr", "kableExtra", "cowplot", "rmarkdown")
 installed_packages <- packages %in% rownames(installed.packages())
 if (any(installed_packages == FALSE)) {
@@ -349,6 +353,7 @@ mtext("ML estimation for R0 over two SI distributions", outer = TRUE, cex = 1.5)
 
 ```{r, include=FALSE}
 ### Sampling R0 
+<<<<<<< HEAD
 #R_val_1 <- sample_R(res1, 1000)
 #summary(R_val_1)
 #quantile(R_val_1)
@@ -358,10 +363,22 @@ mtext("ML estimation for R0 over two SI distributions", outer = TRUE, cex = 1.5)
 #summary(R_val_2)
 #quantile(R_val_2)
 #quantile(R_val_2, c(0.025, 0.975))
+=======
+R_val_1 <- sample_R(res1, 1000)
+summary(R_val_1)
+quantile(R_val_1)
+quantile(R_val_1, c(0.025, 0.975))
+
+R_val_2 <- sample_R(res2, 1000)
+summary(R_val_2)
+quantile(R_val_2)
+quantile(R_val_2, c(0.025, 0.975))
+>>>>>>> 9ca75faa7631f26bb25d2e21e10c6c80531502d0
 ```
 
 
 ```{r, include=FALSE}
+<<<<<<< HEAD
 #par(mfrow = c(1, 2), oma = c(0, 0, 2, 0))
 #hist(R_val_1, border = "grey", col = "navy",
 #     xlab = "Values of R",
@@ -370,6 +387,16 @@ mtext("ML estimation for R0 over two SI distributions", outer = TRUE, cex = 1.5)
 #     xlab = "Values of R",
 #     main = "SI mean 4.4, sd 3")
 #mtext("Sample of likely R0 over two SI", outer = TRUE, cex = 1.5)
+=======
+par(mfrow = c(1, 2), oma = c(0, 0, 2, 0))
+hist(R_val_1, border = "grey", col = "navy",
+     xlab = "Values of R",
+     main = "SI mean 7.5, 3.4")
+hist(R_val_2, border = "grey", col = "navy",
+     xlab = "Values of R",
+     main = "SI mean 4.4, sd 3")
+mtext("Sample of likely R0 over two SI", outer = TRUE, cex = 1.5)
+>>>>>>> 9ca75faa7631f26bb25d2e21e10c6c80531502d0
 ```
 
 ```{r, include=FALSE}
